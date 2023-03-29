@@ -8277,11 +8277,18 @@ class ModelSelectionSchema(KoboldSchema):
     model: str = fields.String(required=True, validate=validate.Regexp(r"^(?!\s*NeoCustom)(?!\s*GPT2Custom)(?!\s*TPUMeshTransformerGPTJ)(?!\s*TPUMeshTransformerGPTNeoX)(?!\s*GooseAI)(?!\s*OAI)(?!\s*InferKit)(?!\s*Colab)(?!\s*API).*$"), metadata={"description": 'Hugging Face model ID, the path to a model folder (relative to the "models" folder in the KoboldAI root folder) or "ReadOnly" for no model'})
 
 def _generate_text(body: GenerationInputSchema):
-    if koboldai_vars.aibusy or koboldai_vars.genseqs:
-        abort(Response(json.dumps({"detail": {
-            "msg": "Server is busy; please try again later.",
-            "type": "service_unavailable",
-        }}), mimetype="application/json", status=503))
+    request_timeout_sum = 0
+    while koboldai_vars.aibusy or koboldai_vars.genseqs:
+        if request_timeout_sum >= 30:
+            abort(Response(json.dumps({"detail": {
+                "msg": "Server is busy; please try again later.",
+                "type": "service_unavailable",
+            }}), mimetype="application/json", status=503))
+        # Sleep until available
+        request_timeout_sum += 0.1
+        time.sleep(0.1)
+    set_aibusy(1)
+
     if koboldai_vars.use_colab_tpu:
         import tpu_mtj_backend
         tpu_mtj_backend.socketio = socketio
@@ -8335,7 +8342,6 @@ def _generate_text(body: GenerationInputSchema):
         "sampler_full_determinism": ("koboldai_vars", "full_determinism", None),
     }
     saved_settings = {}
-    set_aibusy(1)
     disable_set_aibusy = koboldai_vars.disable_set_aibusy
     koboldai_vars.disable_set_aibusy = True
     _standalone = koboldai_vars.standalone

@@ -40,4 +40,3 @@ dependencies:
     - ftfy
     - pydub
     - diffusers
-    - gunicorn
