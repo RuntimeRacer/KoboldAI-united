@@ -8276,19 +8276,7 @@ class WorldInfoUIDsSchema(WorldInfoEntriesUIDsSchema):
 class ModelSelectionSchema(KoboldSchema):
     model: str = fields.String(required=True, validate=validate.Regexp(r"^(?!\s*NeoCustom)(?!\s*GPT2Custom)(?!\s*TPUMeshTransformerGPTJ)(?!\s*TPUMeshTransformerGPTNeoX)(?!\s*GooseAI)(?!\s*OAI)(?!\s*InferKit)(?!\s*Colab)(?!\s*API).*$"), metadata={"description": 'Hugging Face model ID, the path to a model folder (relative to the "models" folder in the KoboldAI root folder) or "ReadOnly" for no model'})
 
-def check_token_auth(client_token):
-    env_token = os.environ.get("END_POINT_TOKEN", "")
-    if len(env_token) == 0 or client_token != env_token:
-        return False
-    return True
-
 def _generate_text(body: GenerationInputSchema):
-    if check_token_auth(request.headers.get('Api-Key')) is False:
-        abort(Response(json.dumps({"detail": {
-            "msg": "Invalid API key provided",
-            "type": "unauthorized",
-        }}), mimetype="application/json", status=403))
-
     request_timeout_sum = 0
     while koboldai_vars.aibusy or koboldai_vars.genseqs:
         if request_timeout_sum >= 30:
