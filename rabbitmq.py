@@ -11,8 +11,12 @@ import requests
 
 
 class RabbitMQHandler:
-    def __init__(self, rabbitmq_host: str, rabbitmq_port: int, poll_channel: str, push_channel: str, koboldai_host: str):
+    def __init__(self, rabbitmq_user: str, rabbitmq_pass: str, rabbitmq_host: str, rabbitmq_port: int, poll_channel: str, push_channel: str, koboldai_host: str):
         # Very simple validity checks
+        if len(rabbitmq_user) == 0:
+            raise RuntimeError("rabbitmq_user not set")
+        if len(rabbitmq_pass) == 0:
+            raise RuntimeError("rabbitmq_pass not set")
         if len(rabbitmq_host) == 0:
             raise RuntimeError("rabbitmq_host not set")
         if len(poll_channel) == 0:
@@ -23,6 +27,8 @@ class RabbitMQHandler:
             raise RuntimeError("koboldai_host not set")
 
         # Setup Params
+        self.rabbitmq_user = rabbitmq_user
+        self.rabbitmq_pass = rabbitmq_pass
         self.rabbitmq_host = rabbitmq_host
         self.rabbitmq_port = rabbitmq_port
         self.poll_channel = poll_channel
@@ -38,10 +44,19 @@ class RabbitMQHandler:
     def run(self):
         # Connect to RabbitMQ
         try:
-            self.polling_connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.rabbitmq_host, port=self.rabbitmq_port))
+            self.polling_connection = pika.BlockingConnection(pika.ConnectionParameters(
+                host=self.rabbitmq_host,
+                port=self.rabbitmq_port,
+                credentials=pika.credentials.PlainCredentials(username=self.rabbitmq_user, password=self.rabbitmq_pass)
+            ))
             self.polling_channel_ref = self.polling_connection.channel()
             self.polling_channel_ref.queue_declare(queue=self.poll_channel)
-            self.pushing_connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.rabbitmq_host, port=self.rabbitmq_port))
+
+            self.pushing_connection = pika.BlockingConnection(pika.ConnectionParameters(
+                host=self.rabbitmq_host,
+                port=self.rabbitmq_port,
+                credentials=pika.credentials.PlainCredentials(username=self.rabbitmq_user, password=self.rabbitmq_pass)
+            ))
             self.pushing_channel_ref = self.pushing_connection.channel()
             self.pushing_channel_ref.queue_declare(queue=self.push_channel)
         except RuntimeError as e:
@@ -76,7 +91,8 @@ class RabbitMQHandler:
 
         # Send Request to target KoboldAI server
         headers = {
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "Api-Key": os.environ.get("END_POINT_TOKEN", "") # TODO REMOVE after testing
         }
         url = self.koboldai_host + "/api/v1/generate"
         result = requests.post(url=url, headers=headers, json=message_body)
@@ -109,6 +125,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     # MQ Parameters
+    parser.add_argument("-u", "--rabbitmq_user", type=str, help="username to establish broker connection")
+    parser.add_argument("-p", "--rabbitmq_pass", type=str, help="password to establish broker connection")
     parser.add_argument("-rh", "--rabbitmq_host", type=str, help="host of the rabbitmq server")
     parser.add_argument("-rp", "--rabbitmq_port", type=int, default=5672, help="port of the rabbitmq server")
     parser.add_argument("-pl", "--poll_channel", type=str, help="name if the rabbitmq channel to subscribe to")
